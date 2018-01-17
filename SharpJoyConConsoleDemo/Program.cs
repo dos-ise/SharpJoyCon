@@ -1,13 +1,31 @@
 ﻿using System;
 using SharpJoyCon;
+using System.Linq;
+using System.Threading;
 
 namespace SharpJoyConConsoleDemo
 {
-  class Program
+  public class Program
   {
     static void Main(string[] args)
     {
-      new JoyconManager().Awake();
+      var manager = new JoyconManager();
+      manager.ConnectJoyCons();
+      manager.Start();
+
+      var firstJoyCon = manager.ConnectedJoyCons.FirstOrDefault();
+      while (true)
+      {
+        manager.Update();
+        Thread.Sleep(500);
+        foreach (Joycon.Button buttonType in Enum.GetValues(typeof(Joycon.Button)))
+        {
+          var isPressed = firstJoyCon.GetButton(buttonType);
+          Console.WriteLine(buttonType + (isPressed ? "isPressed" : "notPressed"));
+        }
+      }
+
+      manager.DisconnectJoyCons();
     }
   }
 }
