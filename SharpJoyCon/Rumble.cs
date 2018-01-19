@@ -8,35 +8,18 @@ namespace SharpJoyCon
     private static readonly ILog Log = LogManager.GetLogger(typeof(Rumble));
     private float h_f, amp, l_f;
 
-    public float t;
-    public bool timed_rumble;
-
-    public void set_vals(float low_freq, float high_freq, float amplitude, int time = 0)
+    public void set_vals(float low_freq, float high_freq, float amplitude)
     {
       h_f = high_freq;
       amp = amplitude;
       l_f = low_freq;
-      timed_rumble = false;
-      t = 0;
-      if (time != 0)
-      {
-        t = time / 1000f;
-        timed_rumble = true;
-      }
     }
 
-    public Rumble(float low_freq, float high_freq, float amplitude, int time = 0)
+    public Rumble(float low_freq, float high_freq, float amplitude)
     {
       h_f = high_freq;
       amp = amplitude;
       l_f = low_freq;
-      timed_rumble = false;
-      t = 0;
-      if (time != 0)
-      {
-        t = time / 1000f;
-        timed_rumble = true;
-      }
     }
 
     private float clamp(float x, float min, float max)

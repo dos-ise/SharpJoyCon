@@ -14,10 +14,7 @@ namespace SharpJoyCon
 
     public ConnectionState currentConnectionState;
 
-    private bool[] buttons_down = new bool[13];
-    private bool[] buttons_up = new bool[13];
     private bool[] buttons = new bool[13];
-    private bool[] down_ = new bool[13];
 
     private float[] stick = { 0, 0 };
     private IntPtr handle;
@@ -64,19 +61,9 @@ namespace SharpJoyCon
       Log.Debug(s);
     }
 
-    public bool GetButtonDown(Button b)
-    {
-      return buttons_down[(int)b];
-    }
-
     public bool GetButton(Button b)
     {
       return buttons[(int)b];
-    }
-
-    public bool GetButtonUp(Button b)
-    {
-      return buttons_up[(int)b];
     }
 
     public float[] GetStick()
@@ -96,13 +83,16 @@ namespace SharpJoyCon
 
     public Quaternion GetVector()
     {
-      throw new NotImplementedException("TODO");
-      //return Quaternion.LookRotation(new Vector3(j_b.X, i_b.X, k_b.X), -(new Vector3(j_b.Z, i_b.Z, k_b.Z)));
+      var zAxis = -(new Vector3(j_b.Z, i_b.Z, k_b.Z));
+      var xAxis = new Vector3(j_b.X, i_b.X, k_b.X);
+      //TODO DOS
+      return new Quaternion();
+      //return Quaternion.LookRotation(xAxis, zAxis));
     }
 
-    public int Attach(byte leds_ = 0x0)
+    internal int Attach(byte leds_ = 0x0)
     {
-      this.currentConnectionState = ConnectionState.ATTACHED;
+      currentConnectionState = ConnectionState.ATTACHED;
       byte[] a = { 0x0 };
       // Input report mode
       Subcommand(0x3, new byte[] { 0x3f }, 1, false);
@@ -233,7 +223,7 @@ namespace SharpJoyCon
             }
             else
             {
-              ExtractIMUValues(report_buf, 0);
+              ExtractIMUValues(report_buf);
             }
           }
           if (ts_de == report_buf[1])
@@ -253,25 +243,12 @@ namespace SharpJoyCon
         }
 
         ProcessButtonsAndStick(report_buf);
-        if (rumble_obj.timed_rumble)
-        {
-          if (rumble_obj.t < 0)
-          {
-            rumble_obj.set_vals(160, 320, 0, 0);
-          }
-          else
-          {
-            throw new NotImplementedException("TODO DOS");
-            //rumble_obj.t -= Time.deltaTime;
-          }
-        }
+
       }
     }
 
-    private int ProcessButtonsAndStick(byte[] report_buf)
+    private void ProcessButtonsAndStick(byte[] report_buf)
     {
-      if (report_buf[0] == 0x00) return -1;
-
       stick_raw[0] = report_buf[6 + (isLeft ? 0 : 3)];
       stick_raw[1] = report_buf[7 + (isLeft ? 0 : 3)];
       stick_raw[2] = report_buf[8 + (isLeft ? 0 : 3)];
@@ -279,15 +256,9 @@ namespace SharpJoyCon
       stick_precal[0] = (UInt16)(stick_raw[0] | ((stick_raw[1] & 0xf) << 8));
       stick_precal[1] = (UInt16)((stick_raw[1] >> 4) | (stick_raw[2] << 4));
       stick = CenterSticks(stick_precal);
+
       lock (buttons)
       {
-        lock (down_)
-        {
-          for (int i = 0; i < buttons.Length; ++i)
-          {
-            down_[i] = buttons[i];
-          }
-        }
         buttons[(int)Button.DPAD_DOWN] = (report_buf[3 + (isLeft ? 2 : 0)] & (isLeft ? 0x01 : 0x04)) != 0;
         buttons[(int)Button.DPAD_RIGHT] = (report_buf[3 + (isLeft ? 2 : 0)] & (isLeft ? 0x04 : 0x08)) != 0;
         buttons[(int)Button.DPAD_UP] = (report_buf[3 + (isLeft ? 2 : 0)] & (isLeft ? 0x02 : 0x02)) != 0;
@@ -300,19 +271,7 @@ namespace SharpJoyCon
         buttons[(int)Button.SHOULDER_2] = (report_buf[3 + (isLeft ? 2 : 0)] & 0x80) != 0;
         buttons[(int)Button.SR] = (report_buf[3 + (isLeft ? 2 : 0)] & 0x10) != 0;
         buttons[(int)Button.SL] = (report_buf[3 + (isLeft ? 2 : 0)] & 0x20) != 0;
-        lock (buttons_up)
-        {
-          lock (buttons_down)
-          {
-            for (int i = 0; i < buttons.Length; ++i)
-            {
-              buttons_up[i] = (down_[i] & !buttons[i]);
-              buttons_down[i] = (!down_[i] & buttons[i]);
-            }
-          }
-        }
       }
-      return 0;
     }
 
     private void ExtractIMUValues(byte[] report_buf, int n = 0)
@@ -323,13 +282,30 @@ namespace SharpJoyCon
       acc_r[0] = (Int16)(report_buf[13 + n * 12] | ((report_buf[14 + n * 12] << 8) & 0xff00));
       acc_r[1] = (Int16)(report_buf[15 + n * 12] | ((report_buf[16 + n * 12] << 8) & 0xff00));
       acc_r[2] = (Int16)(report_buf[17 + n * 12] | ((report_buf[18 + n * 12] << 8) & 0xff00));
+
       for (int i = 0; i < 3; ++i)
       {
-        throw new NotImplementedException("TODO DOS");
-        //acc_g[i] = acc_r[i] * 0.00025f;
-        //gyr_g[i] = (gyr_r[i] - gyr_neutral[i]) * 0.00122187695f;
-        //if (Math.Abs(acc_g[i]) > Math.Abs(max[i]))
-        //  max[i] = acc_g[i];
+        //TODO Check this
+        if (i == 0)
+        {
+          acc_g.X = acc_r[i] * 0.00025f;
+          gyr_g.X = (gyr_r[i] - gyr_neutral[i]) * 0.00122187695f;
+          if (Math.Abs(acc_g.X) > Math.Abs(max[i])) max[i] = acc_g.X;
+        }
+
+        if (i == 1)
+        {
+          acc_g.Y = acc_r[i] * 0.00025f;
+          gyr_g.Y = (gyr_r[i] - gyr_neutral[i]) * 0.00122187695f;
+          if (Math.Abs(acc_g.Y) > Math.Abs(max[i])) max[i] = acc_g.Y;
+        }
+
+        if (i == 2)
+        {
+          acc_g.Z = acc_r[i] * 0.00025f;
+          gyr_g.Z = (gyr_r[i] - gyr_neutral[i]) * 0.00122187695f;
+          if (Math.Abs(acc_g.Z) > Math.Abs(max[i])) max[i] = acc_g.Z;
+        }
       }
     }
 
@@ -347,7 +323,6 @@ namespace SharpJoyCon
 
     private int ProcessIMU(byte[] report_buf)
     {
-
       // Direction Cosine Matrix method
       // http://www.starlino.com/dcm_tutorial.html
 
@@ -406,11 +381,11 @@ namespace SharpJoyCon
       return 0;
     }
 
-    public void Begin()
+    internal void Begin()
     {
       if (PollThreadObj == null)
       {
-        PollThreadObj = new Thread(new ThreadStart(Poll));
+        PollThreadObj = new Thread(Poll);
         PollThreadObj.Start();
       }
     }
@@ -422,7 +397,6 @@ namespace SharpJoyCon
 
     private float[] CenterSticks(UInt16[] vals)
     {
-
       float[] s = { 0, 0 };
       for (uint i = 0; i < 2; ++i)
       {
@@ -440,13 +414,10 @@ namespace SharpJoyCon
       return s;
     }
 
-    public void SetRumble(float low_freq, float high_freq, float amp, int time = 0)
+    public void SetRumble(float low_freq, float high_freq, float amp)
     {
       if (currentConnectionState <= ConnectionState.ATTACHED) return;
-      if (rumble_obj.timed_rumble == false || rumble_obj.t < 0)
-      {
-        rumble_obj = new Rumble(low_freq, high_freq, amp, time);
-      }
+      rumble_obj = new Rumble(low_freq, high_freq, amp);
     }
 
     private void SendRumble(byte[] buf)
