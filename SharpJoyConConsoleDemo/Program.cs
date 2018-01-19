@@ -28,7 +28,7 @@ namespace SharpJoyConConsoleDemo
       {
         manager.Update();
         Thread.Sleep(500);
-        foreach (Joycon.Button buttonType in Enum.GetValues(typeof(Joycon.Button)))
+        foreach (Button buttonType in Enum.GetValues(typeof(Button)))
         {
           var isPressed = firstJoyCon.GetButton(buttonType);
           Console.WriteLine(buttonType + (isPressed ? "isPressed" : "notPressed"));

@@ -21,12 +21,12 @@
     private const ushort product_l = 0x2006;
     private const ushort product_r = 0x2007;
 
-    public List<Joycon> ConnectedJoyCons { get; private set; }
+    public List<JoyCon> ConnectedJoyCons { get; private set; }
 
     public void ConnectJoyCons()
     {
       HIDapi.InitializeDll();
-      ConnectedJoyCons = new List<Joycon>();
+      ConnectedJoyCons = new List<JoyCon>();
      
       HIDapi.hid_init();
 
@@ -52,7 +52,7 @@
           Log.Debug(isLeft ? "Left Joy-Con connected." : "Right Joy-Con connected.");
           IntPtr hid_device = HIDapi.hid_open_path(hidDeviceInfo.path);
           HIDapi.hid_set_nonblocking(hid_device, 1);
-          this.ConnectedJoyCons.Add(new Joycon(hid_device, EnableIMU, EnableLocalize & EnableIMU, 0.04f, isLeft));
+          this.ConnectedJoyCons.Add(new JoyCon(hid_device, EnableIMU, EnableLocalize & EnableIMU, 0.04f, isLeft));
         }
         ptr = hidDeviceInfo.next;
       }
@@ -64,7 +64,7 @@
       for (int i = 0; i < this.ConnectedJoyCons.Count; ++i)
       {
         Log.Debug(i);
-        Joycon jc = this.ConnectedJoyCons[i];
+        JoyCon jc = this.ConnectedJoyCons[i];
         byte LEDs = 0x0;
         LEDs |= (byte)(0x1 << i);
         jc.Attach(LEDs);
@@ -84,7 +84,7 @@
     {
       for (int i = 0; i < this.ConnectedJoyCons.Count; ++i)
       {
-        Joycon jc = this.ConnectedJoyCons[i];
+        JoyCon jc = this.ConnectedJoyCons[i];
         jc.Detach();
       }
     }

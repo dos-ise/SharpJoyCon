@@ -7,52 +7,12 @@ namespace SharpJoyCon
 
   using log4net;
 
-  public class Joycon
+  public class JoyCon
   {
-    private static readonly ILog Log = LogManager.GetLogger(typeof(Joycon));
-
-    public enum DebugType : int
-    {
-      NONE,
-      ALL,
-      COMMS,
-      THREADING,
-      IMU,
-      RUMBLE,
-    };
-
-    public DebugType debug_type = DebugType.IMU;
-
+    private static readonly ILog Log = LogManager.GetLogger(typeof(JoyCon));
     public bool isLeft;
 
-    public enum state_ : uint
-    {
-      NOT_ATTACHED,
-      DROPPED,
-      NO_JOYCONS,
-      ATTACHED,
-      INPUT_MODE_0x30,
-      IMU_DATA_OK,
-    };
-
-    public state_ state;
-
-    public enum Button : int
-    {
-      DPAD_DOWN = 0,
-      DPAD_RIGHT = 1,
-      DPAD_LEFT = 2,
-      DPAD_UP = 3,
-      SL = 4,
-      SR = 5,
-      MINUS = 6,
-      HOME = 7,
-      PLUS = 8,
-      CAPTURE = 9,
-      STICK = 10,
-      SHOULDER_1 = 11,
-      SHOULDER_2 = 12
-    };
+    public ConnectionState currentConnectionState;
 
     private bool[] buttons_down = new bool[13];
     private bool[] buttons_up = new bool[13];
@@ -81,120 +41,7 @@ namespace SharpJoyCon
     private float filterweight;
     private const uint report_len = 49;
 
-    private struct Report
-    {
-      byte[] r;
 
-      DateTime t;
-
-      public Report(byte[] report, System.DateTime time)
-      {
-        r = report;
-        t = time;
-      }
-
-      public DateTime GetTime()
-      {
-        return t;
-      }
-
-      public void CopyBuffer(byte[] b)
-      {
-        for (int i = 0; i < report_len; ++i)
-        {
-          b[i] = r[i];
-        }
-      }
-    };
-
-    private struct Rumble
-    {
-      private float h_f, amp, l_f;
-
-      public float t;
-      public bool timed_rumble;
-
-      public void set_vals(float low_freq, float high_freq, float amplitude, int time = 0)
-      {
-        h_f = high_freq;
-        amp = amplitude;
-        l_f = low_freq;
-        timed_rumble = false;
-        t = 0;
-        if (time != 0)
-        {
-          t = time / 1000f;
-          timed_rumble = true;
-        }
-      }
-
-      public Rumble(float low_freq, float high_freq, float amplitude, int time = 0)
-      {
-        h_f = high_freq;
-        amp = amplitude;
-        l_f = low_freq;
-        timed_rumble = false;
-        t = 0;
-        if (time != 0)
-        {
-          t = time / 1000f;
-          timed_rumble = true;
-        }
-      }
-
-      private float clamp(float x, float min, float max)
-      {
-        if (x < min) return min;
-        if (x > max) return max;
-        return x;
-      }
-
-      public byte[] GetData()
-      {
-        byte[] rumble_data = new byte[8];
-        l_f = clamp(l_f, 40.875885f, 626.286133f);
-        amp = clamp(amp, 0.0f, 1.0f);
-        h_f = clamp(h_f, 81.75177f, 1252.572266f);
-        UInt16 hf = (UInt16)((Math.Round(32f * Math.Log(h_f * 0.1f, 2)) - 0x60) * 4);
-        byte lf = (byte)(Math.Round(32f * Math.Log(l_f * 0.1f, 2)) - 0x40);
-        byte hf_amp;
-        if (amp == 0) hf_amp = 0;
-        else if (amp < 0.117) hf_amp = (byte)(((Math.Log(amp * 1000, 2) * 32) - 0x60) / (5 - Math.Pow(amp, 2)) - 1);
-        else if (amp < 0.23) hf_amp = (byte)(((Math.Log(amp * 1000, 2) * 32) - 0x60) - 0x5c);
-        else hf_amp = (byte)((((Math.Log(amp * 1000, 2) * 32) - 0x60) * 2) - 0xf6);
-
-        UInt16 lf_amp = (UInt16)(Math.Round((double)hf_amp) * .5);
-        byte parity = (byte)(lf_amp % 2);
-        if (parity > 0)
-        {
-          --lf_amp;
-        }
-
-        lf_amp = (UInt16)(lf_amp >> 1);
-        lf_amp += 0x40;
-        if (parity > 0) lf_amp |= 0x8000;
-        rumble_data = new byte[8];
-        rumble_data[0] = (byte)(hf & 0xff);
-        rumble_data[1] = (byte)((hf >> 8) & 0xff);
-        rumble_data[2] = lf;
-        rumble_data[1] += hf_amp;
-        rumble_data[2] += (byte)((lf_amp >> 8) & 0xff);
-        rumble_data[3] += (byte)(lf_amp & 0xff);
-        for (int i = 0; i < 4; ++i)
-        {
-          rumble_data[4 + i] = rumble_data[i];
-        }
-
-        //Log.Debug(string.Format("Encoded hex freq: {0:X2}", encoded_hex_freq));
-        Log.Debug(string.Format("lf_amp: {0:X4}", lf_amp));
-        Log.Debug(string.Format("hf_amp: {0:X2}", hf_amp));
-        Log.Debug(string.Format("l_f: {0:F}", l_f));
-        Log.Debug(string.Format("hf: {0:X4}", hf));
-        Log.Debug(string.Format("lf: {0:X2}", lf));
-
-        return rumble_data;
-      }
-    }
 
     private Queue<Report> reports = new Queue<Report>();
 
@@ -202,7 +49,7 @@ namespace SharpJoyCon
 
     private byte global_count = 0;
 
-    public Joycon(IntPtr handle_, bool imu, bool localize, float alpha, bool left)
+    public JoyCon(IntPtr handle_, bool imu, bool localize, float alpha, bool left)
     {
       handle = handle_;
       imu_enabled = imu;
@@ -212,13 +59,9 @@ namespace SharpJoyCon
       isLeft = left;
     }
 
-    public void DebugPrint(String s, DebugType d)
+    public void DebugPrint(string s)
     {
-      if (debug_type == DebugType.NONE) return;
-      if (d == DebugType.ALL || d == debug_type || debug_type == DebugType.ALL)
-      {
-        Log.Debug(s);
-      }
+      Log.Debug(s);
     }
 
     public bool GetButtonDown(Button b)
@@ -259,7 +102,7 @@ namespace SharpJoyCon
 
     public int Attach(byte leds_ = 0x0)
     {
-      state = state_.ATTACHED;
+      this.currentConnectionState = ConnectionState.ATTACHED;
       byte[] a = { 0x0 };
       // Input report mode
       Subcommand(0x3, new byte[] { 0x3f }, 1, false);
@@ -277,7 +120,7 @@ namespace SharpJoyCon
       Subcommand(0x40, new byte[] { (imu_enabled ? (byte)0x1 : (byte)0x0) }, 1, true);
       Subcommand(0x3, new byte[] { 0x30 }, 1, true);
       Subcommand(0x48, new byte[] { 0x1 }, 1, true);
-      DebugPrint("Done with init.", DebugType.COMMS);
+      DebugPrint("Done with init.");
       return 0;
     }
 
@@ -289,20 +132,20 @@ namespace SharpJoyCon
     public void Detach()
     {
       stop_polling = true;
-      PrintArray(max, format: "Max {0:S}", d: DebugType.IMU);
-      PrintArray(sum, format: "Sum {0:S}", d: DebugType.IMU);
-      if (state > state_.NO_JOYCONS)
+      PrintArray(max, format: "Max {0:S}");
+      PrintArray(sum, format: "Sum {0:S}");
+      if (this.currentConnectionState > ConnectionState.NO_JOYCONS)
       {
         Subcommand(0x30, new byte[] { 0x0 }, 1);
         Subcommand(0x40, new byte[] { 0x0 }, 1);
         Subcommand(0x48, new byte[] { 0x0 }, 1);
         Subcommand(0x3, new byte[] { 0x3f }, 1);
       }
-      if (state > state_.DROPPED)
+      if (this.currentConnectionState > ConnectionState.DROPPED)
       {
         HIDapi.hid_close(handle);
       }
-      state = state_.NOT_ATTACHED;
+      this.currentConnectionState = ConnectionState.NOT_ATTACHED;
     }
 
     private byte ts_en;
@@ -315,24 +158,24 @@ namespace SharpJoyCon
     {
       if (handle == IntPtr.Zero) return -2;
       HIDapi.hid_set_nonblocking(handle, 0);
-      byte[] raw_buf = new byte[report_len];
-      int ret = HIDapi.hid_read(handle, raw_buf, report_len);
-      if (ret > 0)
+      byte[] buffer = new byte[report_len];
+      int bytesRead = HIDapi.hid_read(handle, buffer, report_len);
+      if (bytesRead > 0)
       {
         lock (reports)
         {
-          reports.Enqueue(new Report(raw_buf, System.DateTime.Now));
+          reports.Enqueue(new Report(buffer));
         }
-        if (ts_en == raw_buf[1])
+
+        if (ts_en == buffer[1])
         {
-          DebugPrint(string.Format("Duplicate timestamp enqueued. TS: {0:X2}", ts_en), DebugType.THREADING);
+          DebugPrint(string.Format("Duplicate timestamp enqueued. TS: {0:X2}", ts_en));
         }
-        ts_en = raw_buf[1];
-        DebugPrint(
-          string.Format("Enqueue. Bytes read: {0:D}. Timestamp: {1:X2}", ret, raw_buf[1]),
-          DebugType.THREADING);
+
+        ts_en = buffer[1];
+        DebugPrint(string.Format("Enqueue. Bytes read: {0:D}. Timestamp: {1:X2}", bytesRead, buffer[1]));
       }
-      return ret;
+      return bytesRead;
     }
 
     private Thread PollThreadObj;
@@ -340,30 +183,30 @@ namespace SharpJoyCon
     private void Poll()
     {
       int attempts = 0;
-      while (!stop_polling & state > state_.NO_JOYCONS)
+      while (!stop_polling & this.currentConnectionState > ConnectionState.NO_JOYCONS)
       {
         SendRumble(rumble_obj.GetData());
         int a = ReceiveRaw();
 
         if (a > 0)
         {
-          state = state_.IMU_DATA_OK;
+          this.currentConnectionState = ConnectionState.IMU_DATA_OK;
           attempts = 0;
         }
         else if (attempts > 1000)
         {
-          state = state_.DROPPED;
-          DebugPrint("Connection lost. Is the Joy-Con connected?", DebugType.ALL);
+          this.currentConnectionState = ConnectionState.DROPPED;
+          DebugPrint("Connection lost. Is the Joy-Con connected?");
           break;
         }
         else
         {
-          DebugPrint("Pause 5ms", DebugType.THREADING);
+          DebugPrint("Pause 5ms");
           Thread.Sleep((Int32)5);
         }
         ++attempts;
       }
-      DebugPrint("End poll loop.", DebugType.THREADING);
+      DebugPrint("End poll loop.");
     }
 
     float[] max = { 0, 0, 0 };
@@ -371,16 +214,16 @@ namespace SharpJoyCon
 
     public void Update()
     {
-      if (state > state_.NO_JOYCONS)
+      if (this.currentConnectionState > ConnectionState.NO_JOYCONS)
       {
-        byte[] report_buf = new byte[report_len];
+        byte[] report_buf = null;
         while (reports.Count > 0)
         {
           Report rep;
           lock (reports)
           {
             rep = reports.Dequeue();
-            rep.CopyBuffer(report_buf);
+            report_buf = rep.Data;
           }
           if (imu_enabled)
           {
@@ -395,7 +238,7 @@ namespace SharpJoyCon
           }
           if (ts_de == report_buf[1])
           {
-            DebugPrint(string.Format("Duplicate timestamp dequeued. TS: {0:X2}", ts_de), DebugType.THREADING);
+            DebugPrint(string.Format("Duplicate timestamp dequeued. TS: {0:X2}", ts_de));
           }
           ts_de = report_buf[1];
           DebugPrint(
@@ -404,11 +247,11 @@ namespace SharpJoyCon
               reports.Count,
               report_buf[0],
               report_buf[1],
-              DateTime.Now.Subtract(rep.GetTime()),
-              rep.GetTime().Subtract(ts_prev)),
-            DebugType.THREADING);
-          ts_prev = rep.GetTime();
+              DateTime.Now.Subtract(rep.GetTime),
+              rep.GetTime.Subtract(ts_prev)));
+          ts_prev = rep.GetTime;
         }
+
         ProcessButtonsAndStick(report_buf);
         if (rumble_obj.timed_rumble)
         {
@@ -508,7 +351,7 @@ namespace SharpJoyCon
       // Direction Cosine Matrix method
       // http://www.starlino.com/dcm_tutorial.html
 
-      if (!imu_enabled | state < state_.IMU_DATA_OK) return -1;
+      if (!imu_enabled | this.currentConnectionState < ConnectionState.IMU_DATA_OK) return -1;
 
       if (report_buf[0] != 0x30) return -1; // no gyro data
 
@@ -599,7 +442,7 @@ namespace SharpJoyCon
 
     public void SetRumble(float low_freq, float high_freq, float amp, int time = 0)
     {
-      if (state <= Joycon.state_.ATTACHED) return;
+      if (currentConnectionState <= ConnectionState.ATTACHED) return;
       if (rumble_obj.timed_rumble == false || rumble_obj.t < 0)
       {
         rumble_obj = new Rumble(low_freq, high_freq, amp, time);
@@ -614,7 +457,7 @@ namespace SharpJoyCon
       if (global_count == 0xf) global_count = 0;
       else ++global_count;
       Array.Copy(buf, 0, buf_, 2, 8);
-      PrintArray(buf_, DebugType.RUMBLE, format: "Rumble data sent: {0:S}");
+      PrintArray(buf_, format: "Rumble data sent: {0:S}");
       HIDapi.hid_write(handle, buf_, report_len);
     }
 
@@ -633,7 +476,6 @@ namespace SharpJoyCon
       {
         PrintArray(
           buf_,
-          DebugType.COMMS,
           len,
           11,
           "Subcommand 0x" + string.Format("{0:X2}", sc) + " sent. Data: 0x{0:S}");
@@ -641,12 +483,11 @@ namespace SharpJoyCon
       ;
       HIDapi.hid_write(handle, buf_, len + 11);
       int res = HIDapi.hid_read_timeout(handle, response, report_len, 50);
-      if (res < 1) DebugPrint("No response.", DebugType.COMMS);
+      if (res < 1) DebugPrint("No response.");
       else if (print)
       {
         PrintArray(
           response,
-          DebugType.COMMS,
           report_len - 1,
           1,
           "Response ID 0x" + string.Format("{0:X2}", response[0]) + ". Data: 0x{0:S}");
@@ -688,7 +529,7 @@ namespace SharpJoyCon
       gyr_neutral[0] = (Int16)(buf_[0] | ((buf_[1] << 8) & 0xff00));
       gyr_neutral[1] = (Int16)(buf_[2] | ((buf_[3] << 8) & 0xff00));
       gyr_neutral[2] = (Int16)(buf_[4] | ((buf_[5] << 8) & 0xff00));
-      PrintArray(gyr_neutral, len: 3, d: DebugType.IMU, format: "User gyro neutral position: {0:S}");
+      PrintArray(gyr_neutral, len: 3, format: "User gyro neutral position: {0:S}");
 
       // This is an extremely messy way of checking to see whether there is user stick calibration data present, but I've seen conflicting user calibration data on blank Joy-Cons. Worth another look eventually.
       if (gyr_neutral[0] + gyr_neutral[1] + gyr_neutral[2] == -3 || Math.Abs(gyr_neutral[0]) > 100
@@ -698,7 +539,7 @@ namespace SharpJoyCon
         gyr_neutral[0] = (Int16)(buf_[3] | ((buf_[4] << 8) & 0xff00));
         gyr_neutral[1] = (Int16)(buf_[5] | ((buf_[6] << 8) & 0xff00));
         gyr_neutral[2] = (Int16)(buf_[7] | ((buf_[8] << 8) & 0xff00));
-        PrintArray(gyr_neutral, len: 3, d: DebugType.IMU, format: "Factory gyro neutral position: {0:S}");
+        PrintArray(gyr_neutral, len: 3, format: "Factory gyro neutral position: {0:S}");
       }
     }
 
@@ -717,18 +558,17 @@ namespace SharpJoyCon
         }
       }
       Array.Copy(buf_, 20, read_buf, 0, len);
-      if (print) PrintArray(read_buf, DebugType.COMMS, len);
+      if (print) PrintArray(read_buf, len);
       return read_buf;
     }
 
     private void PrintArray<T>(
       T[] arr,
-      DebugType d = DebugType.NONE,
       uint len = 0,
       uint start = 0,
       string format = "{0:S}")
     {
-      if (d != debug_type && debug_type != DebugType.ALL) return;
+
       if (len == 0) len = (uint)arr.Length;
       string tostr = "";
       for (int i = 0; i < len; ++i)
@@ -737,7 +577,7 @@ namespace SharpJoyCon
           (arr[0] is byte) ? "{0:X2} " : ((arr[0] is float) ? "{0:F} " : "{0:D} "),
           arr[i + start]);
       }
-      DebugPrint(string.Format(format, tostr), d);
+      DebugPrint(string.Format(format, tostr));
     }
   }
 }
